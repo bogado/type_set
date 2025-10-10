@@ -1,0 +1,144 @@
+= Doing set math with types -- an exploration.
+Victor Bogado da Silva Lins
+2025-10-10
+:doctype: article
+:toc:
+:toclevels: 3
+:sectnums:
+:xrefstyle: full
+:icons: font
+:experimental:
+
+== Type collections in {cpp}
+
+In the {cpp} standard there are a few types that work with a collection of types.
+`tuple`s work like a product type, having all the different types represented on it's instances.
+Mean while there are also `variant`s that represent sum types, where it's instance can take form of one of it's forming types.
+
+Okay we can represent type collections, with those two compound type templates.
+Lets see what kind of operations we can do with them.
+
+== Set operations.
+
+=== ∈: "Element of" or "belongs" relation
+
+Element of is a check if type belongs to set `∈` or if doesn't belongs `∉`
+
+Neither the `tuple` nor a `variant` provide a nice way to check if a type belongs to the set of types that defines them.
+The closest you can get it to attempt to use `std::get<TYPE>` on an instance and check if the result is valid {cpp}.
+
+
+=== ⊂ & ⊃ : Subset checks or contains relations
+
+This operation checks whether another set is a subset of another, where a set is a subset of another when all it's elements are present on the other set.
+
+Once again neither `tuple` or `variant` can be checked to be subsets.
+There's another subtle detail that is relevant here, in math the order of the element is irrelevant.
+This is not true for {cpp} `tuple`s or `variant`s, that is a `std::tuple<int, char>` is different than `std::tuple<char, int>`.
+
+This means that the equality relationship that {cpp} provides is not compatible with the mathematical notion of set equality.
+
+=== ∪ : Union operation.
+:union-footnote: pass:c,q[footnote:union[Not exactly true, since the `std::tuple_cat` operates on instances, and if instances cannot be copied or moved the `std::tuple_cat` can fail. ]]
+:std-tuple_cat: pass:c,q[https://en.cppreference.com/w/cpp/utility/tuple/tuple_cat[`std::tuple_cat`]]
+
+The result of an union of two sets is the set that contains all element of all the original sets and no more elements.
+
+With `tuples` you can create a union of different tuples using {std-tuple_cat}{union-footnote}.
+`Variants` don't have any way of creating an union `variant` type.
+
+=== ∩ : Intersection operation.
+
+The intersection section of two sets is the set of all elements in one that are also present in the other.
+
+This operation is also not possible with neither `tuple`s or `variant`s.
+
+=== - : Difference operation.
+
+The set difference is a set that has all the elements of the first set that are not elements from the second set. 
+This operation is not commutative, like the intersection or union.
+
+This operation is not available for `tuple`s or `variant`s.
+
+== Creating a type collection template with all these operations.
+
+.Design characteristics:
+. type collections are ethereal, instances of these types do not have any content.
+. type collections can be operated with the set operations above.
+. Both `tuple` and `variant` can be used to create a type set.
+. Both `tuple` and `variant` types can be extracted from the type sets.
+. Creating a `tuple` or `variant` from a type set that was created from a `tuple` or `variant` should not be different than the original.
+. `void` cannot be part of a type set.
+
+Because of the last requirement, not all type set are actual sets.
+For instance the type set created from `std::tuple<int, int>` is not a set.
+The type sets that are indeed sets will satisfy the concept `is_type_set`.
+
+For this reason I'm calling this template type a `type_collection` not a `type_set`.
+
+Type set have the following static values : 
+
+.`typeset::`
+[horizontal]
+`cardinality`:: Number of elements
+`empty`:: Is this an empty set? (`cardinality == 0`)
+`is_set`:: Is this a set?
+`template count_of<element_type>`:: Number of times `element_type` is present on this set.
+This is 1 or 0 for actual sets.
+`same_as[_collection]<other_collection or types...>`:: True if this represents the same collection.
+The order do not matter here `type_collection<int, char>::same_as<char, int> == true`.
+`contains[_collection]<other_collection or types...>`:: True when the other collection is contained in this collection.
+`typename template element<N>`:: Type of the element at the `N`^th^ index
+`typename template union_with[_collection]<other_collection or types...>`:: Type collection that is the union of this collection with another.
+`typename template intersection_with[_collection]<other_collection or types...>`:: Type collection that is the intersection of this collection with another.
+`typename template difference_with[_collection]<other_collection or types...>`:: Type collection that is the intersection of this collection with another.
+`as_tuple`:: `std::tuple` created from this type collection.
+`as_variant`:: `std::variant` created from this type collection, this is not valid for empty type collections.
+
+On the type templates that represent operations with other collections, two possible syntaxes are used.
+`operation_with_collection<other_collection>` when operating directly with another collection.
+Or `operation_with<types...>` as a short-hand for `operation_with_collection<type_collection<types...>>`.
+
+Type collection types can be created from `std::tuple` or `std::variant` using the aliases:
+
+`collection_from_tuple<std::tuple<types...>>`:: To create from a `std::tuple`.
+`collection_from_variant<std::variant<types...>>`:: To create from a `std::variant`.
+`collection_from<either<types...>>`:: Can be used on either `std::tuple`s or `std::variant`s.
+
+== The secret sauce.
+
+For most of the set operations I've used a variation of the following construct : 
+
+[source,c++]
+----
+template <is_element_type... TYPEs>
+struct type_collection {
+…
+    template <is_type_collection OTHER>
+    using operation = decltype([]
+            <typename SELF, std::size_t N, std::size_t... Ns, is_element_type... TYPEs> <1>
+            (std::index_sequence<N, Ns...>, TYPEs* ...elements) <2>
+        { 
+        static constexpr auto should_contain_element = <3>
+        if constexpr (sizeof...(TYPEs) == 0) { <4>
+            if constexpr ( should_contain_element) {
+                return type_collection<… TYPEs..., OTHER::element<N>>{}; 
+            } else {
+                return type_collection<… TYPEs...>{};
+            }
+        }
+        if constexpr (should_contain_element) {
+            return self(std::index_sequence<Ns...>{}, elements..., static_cast<OTHER::element<N>*>(nullptr));
+        } else {
+            return self(std::index_sequence<Ns...>{}, elements...);
+        }
+    }(std::make_index_sequence<OTHER::cardinality>())); <5>
+…
+};
+----
+<1> The lambda uses a index sequence to consume the elements from the other collection.
+`N` is the current index, while the `Ns...` are used to invoke the next step.
+<2> The "deducing this" syntax is used to make the lambda recursive.
+<3> This boolean checks if the current element should be part of the result.
+<4> This verifies if this is the last recursion.
+<5> In the actual code a `index_set` static variable helps the notation here.
