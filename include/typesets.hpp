@@ -82,8 +82,17 @@ struct type_collection<>
 
     static constexpr bool is_set = true;
 
-    template<is_element_or_void OTHER>
-    using add_element = std::conditional_t<std::same_as<OTHER, void>, type_collection<>, type_collection<OTHER>>;
+    template<is_type_collection OTHER>
+    static constexpr bool same_as_collection = std::same_as<OTHER, type_collection<>>;
+
+    template<is_type_collection OTHER>
+    static constexpr bool contains_collection = same_as_collection<OTHER>;
+
+    template<is_element_type... OTHERs>
+    static constexpr bool same_as = sizeof...(OTHERs) == 0;
+
+    template<is_element_type... OTHERs>
+    static constexpr bool contains = same_as<OTHERs...>;
 
     template<is_type_collection OTHER>
     using union_with_collection = OTHER;
@@ -96,6 +105,12 @@ struct type_collection<>
 
     template<is_type_collection OTHER>
     using intersection_with_collection = type_collection<>;
+
+    template<is_element_type... OTHERs>
+    using difference_with = type_collection<>;
+
+    template<is_type_collection OTHER>
+    using difference_with_collection = type_collection<>;
 };
 
 template<is_element_type HEAD, is_element_type... TYPEs>
@@ -122,7 +137,7 @@ struct type_collection<HEAD, TYPEs...>
     using element = std::conditional_t<N == 0, HEAD, typename tail_collection:: template element<N - 1>>;
 
     template<is_element_or_void OTHER>
-    static constexpr auto count_of = std::same_as<void, OTHER> ? 0 : (std::same_as<HEAD, OTHER> ? 1 : 0) + tail_collection:: template count_of<OTHER>;
+    static constexpr auto count_of = std::same_as<void, OTHER> ? 0 : ((std::same_as<HEAD, OTHER> ? 1 : 0) + ((std::same_as<OTHER, TYPEs>?1:0) + ... + 0));
 
     template<is_element_or_void OTHER>
     static constexpr auto belongs = std::same_as<void, OTHER> ? false : count_of<OTHER> > 0;
@@ -131,6 +146,22 @@ struct type_collection<HEAD, TYPEs...>
     using append = type_collection<HEAD, TYPEs..., OTHER>;
 
     static constexpr bool is_set = tail_collection::is_set && !tail_collection::template belongs<top_type>;
+
+    template<is_type_collection OTHER>
+    static constexpr bool same_as_collection = []<auto... Ns>(std::index_sequence<Ns...>) {
+        return cardinality == OTHER::cardinality && ((count_of<element<Ns>> == OTHER::template count_of<element<Ns>>) && ...);
+    }(index_set);
+
+    template<is_type_collection OTHER>
+    static constexpr bool contains_collection = []<auto... Ns>(std::index_sequence<Ns...>) {
+        return cardinality == OTHER::cardinality && ((OTHER::template count_of<typename OTHER::template element<Ns>> >= count_of<typename OTHER::template element<Ns>>) && ...);
+    }(OTHER::index_set);
+
+    template<is_element_type... OTHERs>
+    static constexpr bool same_as = same_as<type_collection<OTHERs...>>;
+
+    template<is_element_type... OTHERs>
+    static constexpr bool contains = contains_collection<type_collection<OTHERs...>>;
 
     template<is_type_collection COLLECTION_B>
     static constexpr bool is_subset =
@@ -142,36 +173,67 @@ struct type_collection<HEAD, TYPEs...>
     using add_element = std::conditional_t<!is_element_type<OTHER> || belongs<OTHER>, type_collection, type_collection<HEAD, TYPEs..., OTHER>>;
 
     template<is_type_collection OTHER>
-    using union_with_collection = decltype([]() {
-        if constexpr (OTHER::cardinality > 0) {
-            return typename add_element<typename OTHER::template element<0>>::template union_with_collection<typename OTHER::tail_collection>{};
-        } else {
-            return type_collection{};
-        }
-    }());
+        using union_with_collection = decltype([]<typename SELF, std::size_t N, std::size_t... Ns, is_element_type... OTHER_TYPEs>(this const SELF& self, std::index_sequence<N, Ns...>, OTHER_TYPEs*... ts) {
+            using current = OTHER::template element<N>;
+            static constexpr auto last = sizeof...(Ns) == 0;
+            if constexpr (last) {
+                if constexpr (belongs<current>) {
+                    return type_collection<HEAD, TYPEs..., OTHER_TYPEs...>{};
+                } else {
+                    return type_collection<HEAD, TYPEs..., OTHER_TYPEs..., current>{};
+                }
+            } else if constexpr (belongs<current>) {
+                return self(std::index_sequence<Ns...>(), ts..., static_cast<current *>(nullptr));
+            } else {
+                return self(std::index_sequence<Ns...>(), ts...);
+            }
+        }(OTHER::index_set));
 
     template<is_element_type ... OTHERs>
-    using union_with = decltype([](){
-        if constexpr (sizeof...(OTHERs) > 0) {
-            return union_with_collection<type_collection<OTHERs...>>{};
-        } else {
-            return type_collection{};
-        }
-    }());
+    using union_with = union_with_collection<type_collection<OTHERs...>>;
 
     template <is_type_collection OTHER>
-    using intersection_with_collection = decltype([](){
-        if constexpr (OTHER::cardinality == 0) {
-            return type_collection<>{};
-        } else if constexpr (OTHER::template belongs<top_type>) {
-            return typename type_collection<top_type>::template union_with_collection<typename tail_collection::template intersection_with_collection<OTHER>>{};
-        } else {
-            return typename tail_collection:: template intersection_with_collection<OTHER>{};
-        }
-    }());
+        using intersection_with_collection = decltype([]<typename SELF, is_type_collection OTHER_T, is_element_type... ELEMENTs>(this const SELF& self, OTHER_T, ELEMENTs*... elements) {
+            using current = OTHER_T::top_type;
+            using NEXT_OTHER = OTHER_T::tail_collection;
+            static constexpr auto belong = OTHER::template belongs<current>;
+            static constexpr auto last = OTHER_T::cardinality == 1;
+            if constexpr (last) {
+                if constexpr (belong) {
+                    return type_collection<ELEMENTs..., current>{};
+                } else {
+                    return type_collection<ELEMENTs...>{};
+                }
+            } else if constexpr (belong) {
+                return self(NEXT_OTHER{}, elements..., static_cast<current*>(nullptr));
+            } else {
+                return self(NEXT_OTHER{}, elements...);
+            }
+        }(OTHER{}));
 
     template <is_element_type ... OTHERs>
     using intersection_with = intersection_with_collection<type_collection<OTHERs...>>;
+
+    template <is_type_collection OTHER>
+        using difference_with_collection = decltype([]<typename SELF, is_element_type... ELEMENTs, auto N, auto... Ns>(this const SELF& self, std::index_sequence<N, Ns...>, ELEMENTs*... elements) {
+            using current = element<N>;
+            static constexpr auto NEXT_INDEXs = std::index_sequence<Ns...>{};
+            static constexpr auto last = sizeof...(Ns) == 0;
+            if constexpr (last) {
+                if constexpr (OTHER::template belongs<current>) {
+                    return type_collection<ELEMENTs...>{};
+                } else {
+                    return type_collection<ELEMENTs..., current>{};
+                }
+            } else if constexpr (OTHER::template belongs<current>) {
+                return self(NEXT_INDEXs, elements...);
+            } else {
+                return self(NEXT_INDEXs, elements..., static_cast<current*>(nullptr));
+            }
+        }(index_set));
+
+    template <is_element_type ... OTHERs>
+    using difference_with = difference_with_collection<type_collection<OTHERs...>>;
 };
 
 template<typename TYPE_COLLECTION, typename... TYPEs>
@@ -208,9 +270,13 @@ using test_1 = type_collection<int, char>;
 using test_2 = type_collection<char, int>;
 
 static_assert(test_1::cardinality == 2);
+static_assert(std::same_as<type_collection<int, char>::template union_with<unsigned>, type_collection<int, char, unsigned>>);
 static_assert(type_collection<int, char>::template union_with<unsigned>::cardinality == 3);
 static_assert(type_collection<int, char>::template union_with<int>::cardinality == 2);
 static_assert(std::same_as<type_collection<int, char>::template intersection_with<int>, type_collection<int>>);
+static_assert(std::same_as<type_collection<int, char, char*, int*>::template intersection_with<int, int*>, type_collection<int, int*>>);
+static_assert(std::same_as<type_collection<int, char>::template difference_with<int>, type_collection<char>>);
+static_assert(std::same_as<type_collection<int>::template difference_with<int, char>, type_collection<>>);
 static_assert(std::same_as<type_collection<int, char, char*, int*>::template intersection_with<int, int*>, type_collection<int, int*>>);
 
 static_assert(type_collection<int>::is_set);
