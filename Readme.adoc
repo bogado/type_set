@@ -12,8 +12,8 @@ Victor Bogado da Silva Lins
 == Type collections in {cpp}
 
 In the {cpp} standard there are a few types that work with a collection of types.
-`tuple`s work like a product type, having all the different types represented on it's instances.
-Mean while there are also `variant`s that represent sum types, where it's instance can take form of one of it's forming types.
+The standard `std::tuple` work like a product type, having all the different types represented on it's instances.
+Mean while there are also `std::variant` that represent sum types, where it's instance can take form of one of it's forming types.
 
 Okay we can represent type collections, with those two compound type templates.
 Lets see what kind of operations we can do with them.
@@ -79,7 +79,6 @@ For this reason I'm calling this template type a `type_collection` not a `type_s
 Type set have the following static values : 
 
 .`typeset::`
-[horizontal]
 `cardinality`:: Number of elements
 `empty`:: Is this an empty set? (`cardinality == 0`)
 `is_set`:: Is this a set?
