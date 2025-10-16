@@ -114,12 +114,18 @@ template <is_element_type... TYPEs>
 struct type_collection {
 …
     template <is_type_collection OTHER>
-    using operation = decltype([]
-            <typename SELF, std::size_t N, std::size_t... Ns, is_element_type... TYPEs> <1>
-            (std::index_sequence<N, Ns...>, TYPEs* ...elements) <2>
+    using operation = decltype([]<
+                typename SELF,
+                std::size_t N,
+                std::size_t... Ns,<1>
+                is_element_type... TYPEs <2>
+            > (
+                this SELF&& self, <3>
+                std::index_sequence<N, Ns...>,
+                TYPEs* ...elements)
         { 
-        static constexpr auto should_contain_element = <3>
-        if constexpr (sizeof...(TYPEs) == 0) { <4>
+        static constexpr auto should_contain_element = <4>
+        if constexpr (sizeof...(TYPEs) == 0) { <5>
             if constexpr ( should_contain_element) {
                 return type_collection<… TYPEs..., OTHER::element<N>>{}; 
             } else {
@@ -127,17 +133,19 @@ struct type_collection {
             }
         }
         if constexpr (should_contain_element) {
-            return self(std::index_sequence<Ns...>{}, elements..., static_cast<OTHER::element<N>*>(nullptr));
+            return self(std::index_sequence<Ns...>{}, elements..., static_cast<OTHER::element<N>*>(nullptr));<2>
         } else {
-            return self(std::index_sequence<Ns...>{}, elements...);
+            return self(std::index_sequence<Ns...>{}, elements...);<2>
         }
-    }(std::make_index_sequence<OTHER::cardinality>())); <5>
+    }(std::make_index_sequence<OTHER::cardinality>())); <6>
 …
 };
 ----
 <1> The lambda uses a index sequence to consume the elements from the other collection.
 `N` is the current index, while the `Ns...` are used to invoke the next step.
-<2> The "deducing this" syntax is used to make the lambda recursive.
-<3> This boolean checks if the current element should be part of the result.
-<4> This verifies if this is the last recursion.
-<5> In the actual code a `index_set` static variable helps the notation here.
+<2> We also keep track of the elements we're using.
+<3> The "deducing this" syntax is used to make the lambda recursive.
+<4> This boolean checks if the current element should be part of the result.
+<5> This verifies if this is the last recursion.
+<6> In the actual code a `index_set` static variable helps the notation here.
+
