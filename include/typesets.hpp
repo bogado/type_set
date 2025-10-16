@@ -270,14 +270,35 @@ using test_1 = type_collection<int, char>;
 using test_2 = type_collection<char, int>;
 
 static_assert(test_1::cardinality == 2);
-static_assert(std::same_as<type_collection<int, char>::template union_with<unsigned>, type_collection<int, char, unsigned>>);
-static_assert(type_collection<int, char>::template union_with<unsigned>::cardinality == 3);
-static_assert(type_collection<int, char>::template union_with<int>::cardinality == 2);
-static_assert(std::same_as<type_collection<int, char>::template intersection_with<int>, type_collection<int>>);
-static_assert(std::same_as<type_collection<int, char, char*, int*>::template intersection_with<int, int*>, type_collection<int, int*>>);
-static_assert(std::same_as<type_collection<int, char>::template difference_with<int>, type_collection<char>>);
-static_assert(std::same_as<type_collection<int>::template difference_with<int, char>, type_collection<>>);
-static_assert(std::same_as<type_collection<int, char, char*, int*>::template intersection_with<int, int*>, type_collection<int, int*>>);
+static_assert(std::same_as<
+    type_collection<int, char>::
+        template union_with<unsigned>,
+    type_collection<int, char, unsigned>>);
+static_assert(
+    type_collection<int, char>::
+        template union_with<unsigned>::cardinality == 3);
+static_assert(
+    type_collection<int, char>::
+        template union_with<int>::cardinality == 2);
+static_assert(std::same_as<type_collection<int, char>::
+    template intersection_with<int>,
+    type_collection<int>>);
+static_assert(std::same_as<
+    type_collection<int, char, char*, int*>::template
+        intersection_with<int, int*>,
+    type_collection<int, int*>>);
+static_assert(std::same_as<
+    type_collection<int, char>::
+        template difference_with<int>,
+    type_collection<char>>);
+static_assert(std::same_as<
+    type_collection<int>::
+        template difference_with<int, char>,
+    type_collection<>>);
+static_assert(std::same_as<
+    type_collection<int, char, char*, int*>::
+        template intersection_with<int, int*>,
+    type_collection<int, int*>>);
 
 static_assert(type_collection<int>::is_set);
 static_assert(type_collection<std::vector<int>>::is_set);
