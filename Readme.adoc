@@ -34,7 +34,7 @@ This operation checks whether another set is a subset of another, where a set is
 
 Once again neither `tuple` or `variant` can be checked to be subsets.
 There's another subtle detail that is relevant here, in math the order of the element is irrelevant.
-This is not true for {cpp} `tuple`s or `variant`s, that is a `std::tuple<int, char>` is different than `std::tuple<char, int>`.
+This is not true for {cpp} ``tuple``s or ``variant``s, that is a `std::tuple<int, char>` is different than `std::tuple<char, int>`.
 
 This means that the equality relationship that {cpp} provides is not compatible with the mathematical notion of set equality.
 
@@ -51,7 +51,7 @@ With `tuples` you can create a union of different tuples using {std-tuple_cat}{u
 
 The intersection section of two sets is the set of all elements in one that are also present in the other.
 
-This operation is also not possible with neither `tuple`s or `variant`s.
+This operation is also not possible with neither ``tuple``s or ``variant``s.
 
 === - : Difference operation.
 
