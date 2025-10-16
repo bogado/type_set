@@ -133,9 +133,16 @@ struct type_collection {
             }
         }
         if constexpr (should_contain_element) {
-            return self(std::index_sequence<Ns...>{}, elements..., static_cast<OTHER::element<N>*>(nullptr));<2>
+            return self( <2>
+                std::index_sequence<Ns...>{},
+                elements...,
+                static_cast<OTHER::element<N>*>(nullptr)
+            );
         } else {
-            return self(std::index_sequence<Ns...>{}, elements...);<2>
+            return self( <2>
+                std::index_sequence<Ns...>{},
+                elements...
+            );
         }
     }(std::make_index_sequence<OTHER::cardinality>())); <6>
 …
@@ -146,6 +153,8 @@ struct type_collection {
 <2> We also keep track of the elements we're using.
 <3> The "deducing this" syntax is used to make the lambda recursive.
 <4> This boolean checks if the current element should be part of the result.
-<5> This verifies if this is the last recursion.
+<5> Recursion ending cases. 
 <6> In the actual code a `index_set` static variable helps the notation here.
 
+This is a tail recursion, and never backtracks.
+In other words it grows linearly with the cardinality of the set being operated on.
